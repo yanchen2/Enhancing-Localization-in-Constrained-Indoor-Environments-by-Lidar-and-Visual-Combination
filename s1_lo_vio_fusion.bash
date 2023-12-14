@@ -1,0 +1,2 @@
+source devel/setup.bash
+roslaunch wpb_mani_simulator cw_fusion.launch
