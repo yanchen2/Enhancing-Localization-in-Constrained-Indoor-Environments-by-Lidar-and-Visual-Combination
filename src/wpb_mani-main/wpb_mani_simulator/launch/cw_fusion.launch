@@ -1,0 +1,116 @@
+<launch>
+  <param name="use_sim_time" value="true"/>
+
+    <!-- ========================================== -->
+    <!-- ============== Robot Sim ================= -->
+    <!-- ========================================== -->
+
+    <arg name="x" default="1.0"/>
+    <arg name="y" default="4.5"/>
+    <arg name="z" default="0.0"/>
+    <arg name="yaw" default="-1.57"/>
+
+    <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name" value="$(find wpb_mani_simulator)/worlds/fusion_sim_z8.world"/>
+    <arg name="paused" value="false"/>
+    <arg name="use_sim_time" value="true"/>
+    <arg name="gui" value="true"/>
+    <arg name="recording" value="false"/>
+    <arg name="debug" value="false"/>
+    </include>
+
+    <!-- Spawn a robot into Gazebo -->
+    <param name="robot_description" command="$(find xacro)/xacro --inorder $(find wpb_mani_description)/urdf/cw_wpb_mani.urdf.xacro" />
+    <node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model" args="-param robot_description -urdf -x $(arg x) -y $(arg y) -Y $(arg yaw) -model wpb_mani" />
+
+    <!-- load the controllers of wpb_mani-->
+    <include file="$(find wpb_mani_simulator)/launch/cw_wpb_mani_controllers.launch"/>
+
+    <!-- Run lidar filter -->
+    <node pkg="wpb_mani_simulator" type="wpb_mani_sim_lidar_filter" name="wpb_mani_sim_lidar_filter">
+    <param name="pub_topic" value="/scan"/>
+    </node>
+
+    <!-- ========================================== -->
+    <!-- ============== Map Server ================ -->
+    <!-- ========================================== -->
+    
+    <node name="map_server" pkg="map_server" type="map_server" args="$(find wpb_mani_simulator)/map/new_map.yaml"/>
+
+    <!-- ========================================== -->
+    <!-- ================= AMCL =================== -->
+    <!-- ========================================== -->
+
+    <include file="$(find wpb_mani_simulator)/config/move_base/amcl_omni.launch" />
+
+    <!-- ========================================== -->
+    <!-- ============== VinsMono VIO ============== -->
+    <!-- ========================================== -->
+
+    <include file="$(find vins_estimator)/launch/cw_sim_vio_norviz.launch" />
+
+    <!-- ========================================== -->
+    <!-- ================= EKF Fusion ============= -->
+    <!-- ========================================== -->
+
+    <!-- <node name="base_imu_link" pkg="tf" type="static_transform_publisher" 
+        args="0 0 0 0 0 0  /base_footprint /base_link 50"/> -->
+    <!-- <node name="cw_world_map" pkg="tf" type="static_transform_publisher" 
+        args="0 0 0 0 0 0  /world /map 50"/>
+    <node name="cw_map_ekf_odom" pkg="tf" type="static_transform_publisher" 
+        args="0 0 0 0 0 0  /map /odom_fusion 50"/> -->
+
+    <node pkg="tf2_ros" type="static_transform_publisher"
+        name="cw_world_map"      args="0 0 0 0 0 0 /world /map" />
+    <node pkg="tf2_ros" type="static_transform_publisher"
+        name="cw_map_ekf_odom"      args="0 0 0 0 0 0 /map /odom_fusion" />
+
+    <!-- 因为取消机械臂后需要添加的TF,如果带有机械臂则注释此2内容 -->
+    <node name="cw_base_kinect" pkg="tf" type="static_transform_publisher" 
+        args="0 0 0 0 0 0  /base_link /kinect_pitch_link 50"/>
+    <node name="cw_base_link5" pkg="tf" type="static_transform_publisher" 
+        args="0 0 0 0 0 0  /base_link /link5 50"/>
+
+    <node pkg="robot_pose_ekf" type="robot_pose_ekf" name="robot_pose_ekf" output="screen" > 
+        <param name="output_frame" value="odom_fusion"/>
+        <param name="base_footprint_frame" value="ekf_base"/>
+        <param name="freq" value="30.0"/>
+        <param name="sensor_timeout" value="1.0"/>  
+
+        <param name="odom_used" value="true"/>
+        <remap from="odom" to="/odom" />
+
+        <param name="imu_used" value="false"/>
+        <remap from="imu_data" to="/imu" />
+
+        <param name="vo_used" value="false"/>
+        <remap from="vo" to="/vins_estimator/odometry" />
+    </node>
+
+
+    <!-- ========================================== -->
+    <!-- ================= Move Base ============= -->
+    <!-- ========================================== -->
+    <!-- <node pkg="move_base" type="move_base" respawn="false" name="move_base"  output="screen">
+        <rosparam file="$(find wpb_mani_simulator)/config/move_base/costmap_common_params.yaml" command="load" ns="global_costmap" />
+        <rosparam file="$(find wpb_mani_simulator)/config/move_base/costmap_common_params.yaml" command="load" ns="local_costmap" />
+        <rosparam file="$(find wpb_mani_simulator)/config/move_base/local_costmap_params.yaml" command="load" />
+        <rosparam file="$(find wpb_mani_simulator)/config/move_base/global_costmap_params.yaml" command="load" />
+        <param name="base_global_planner" value="global_planner/GlobalPlanner" /> 
+        <param name="use_dijkstra" value="true"/>
+        <param name="base_local_planner" value="wpb_local_planner/WpbLocalPlanner" />
+        <param name= "controller_frequency" value="10" type="double"/>
+    </node> -->
+
+    <!-- RViz and TF tree -->
+    <arg name="gui" default="false" />
+    <arg name="model" default="$(find wpb_mani_description)/urdf/cw_wpb_mani.urdf.xacro"/>
+    <param name="robot_description" command="$(find xacro)/xacro $(arg model)" />
+    <param name="use_gui" value="$(arg gui)"/>
+    <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher"/>
+
+    <arg name="rvizconfig" default="$(find wpb_mani_simulator)/rviz/cw_loc.rviz" />
+    <node name="rviz" pkg="rviz" type="rviz" args="-d $(arg rvizconfig)" required="true" />
+
+
+</launch>
